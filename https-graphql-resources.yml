@@ -1,0 +1,9 @@
+version: 1.0
+provider:
+  name: openfaas
+  gateway: https://openfaas.allotr.eu
+functions:
+  https-graphql-resources:
+    lang: node-typescript-express
+    handler: ./https-graphql-resources
+    image: rafaelpernil/https-graphql-resources:latest
