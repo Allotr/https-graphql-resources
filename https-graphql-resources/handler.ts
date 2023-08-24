@@ -24,7 +24,7 @@ function onExpressServerCreated(app: core.Express) {
   initializeGooglePassport(app);
   initializeWebPush(app);
   app.use("/graphql",
-    // isLoggedIn,
+    isLoggedIn,
     connectionMiddleware,
     graphqlHTTP((req, res, params) => {
       const query = params?.query;
