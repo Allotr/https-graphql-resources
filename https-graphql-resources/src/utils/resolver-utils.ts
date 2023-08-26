@@ -1,12 +1,13 @@
 import { OperationResult, ResourceDbObject, UserDbObject, LocalRole, TicketStatusCode, RequestSource, ResourceManagementResult, ResourceNotificationDbObject, ResourceUser } from "allotr-graphql-schema-types";
 import { ObjectId, ClientSession, Db, ReadPreference, WriteConcern, ReadConcern, TransactionOptions } from "mongodb"
-import { generateChannelId, getLastQueuePosition, getLastStatus, getFirstQueuePosition } from "./data-util";
-import { canRequestStatusChange } from "../guards/guards";
+import { generateChannelId, getFirstQueuePosition, getLastQueuePosition, getLastStatus } from "./data-util";
 import { NOTIFICATIONS, RESOURCES, USERS } from "../consts/collections";
 import { sendNotification } from "../notifications/web-push";
 import { RESOURCE_READY_TO_PICK } from "../consts/connection-tokens";
 import { getRedisConnection } from "./redis-connector";
-import express from "express";
+
+import { GraphQLContext } from "../types/yoga-context";
+import { canRequestStatusChange } from "../guards/guards";
 async function getUserTicket(userId: string | ObjectId, resourceId: string, db: Db, session?: ClientSession): Promise<ResourceDbObject | null> {
     const [parsedUserId, parsedResourceId] = [new ObjectId(userId), new ObjectId(resourceId)];
 
@@ -196,14 +197,14 @@ async function forwardQueue(
 async function clearOutQueueDependantTickets(
     resource: ResourceDbObject,
     userList: ResourceUser[],
-    context: express.Request,
+    context: GraphQLContext,
     status: typeof TicketStatusCode.Active | typeof TicketStatusCode.AwaitingConfirmation,
     db: Db,
     session?: ClientSession
 ) {
 
     const functionMap: Record<typeof status, Function> = {
-        ACTIVE: async (parent, args, context: express.Request) => {
+        ACTIVE: async (parent, args, context: GraphQLContext) => {
             const { requestFrom, resourceId } = args
             let timestamp = new Date();
 
@@ -258,10 +259,14 @@ async function clearOutQueueDependantTickets(
             await pushNotification(resource?.name, resource?._id, resource?.createdBy?._id, resource?.createdBy?.username, timestamp, db);
 
 
+            context?.cache?.invalidate([{ typename: 'ResourceView', id: resourceId }])
+            context?.cache?.invalidate([{ typename: 'ResourceCard', id: resourceId }])
+
+
             // Status changed, now let's return the new resource
             return generateOutputByResource[requestFrom](resource, new ObjectId(context?.user?._id ?? ""), resourceId, db);
         },
-        AWAITING_CONFIRMATION: async (parent, args, context: express.Request) => {
+        AWAITING_CONFIRMATION: async (parent, args, context: GraphQLContext) => {
             const { resourceId } = args
             let timestamp = new Date();
 
@@ -332,6 +337,9 @@ async function clearOutQueueDependantTickets(
 
             await pushNotification(resource?.name, resource?._id, resource?.createdBy?._id, resource?.createdBy?.username, timestamp, db);
 
+            context?.cache?.invalidate([{ typename: 'ResourceView', id: resourceId }])
+            context?.cache?.invalidate([{ typename: 'ResourceCard', id: resourceId }])
+
             // Status changed, now let's return the new resource
             return generateOutputByResource["HOME"](resource, new ObjectId(context?.user?._id ?? ""), resourceId, db);
         }
@@ -354,7 +362,7 @@ async function clearOutQueueDependantTickets(
             const args = argMap[status](new ObjectId(resource?._id ?? "").toHexString() ?? "", RequestSource.Resource)
             const functionContext = {
                 ...context,
-                user: await getUser(new ObjectId(user.id), db, session)
+                // user: await getUser(new ObjectId(user.id), db, session)
             }
             await functionMap[status]?.(undefined, args, functionContext);
         } catch (e) {
@@ -365,7 +373,7 @@ async function clearOutQueueDependantTickets(
 }
 
 async function removeUsersInQueue(resource: ResourceDbObject, userList: ResourceUser[], timestamp: Date,
-    db: Db, context: Express.Request, session?: ClientSession) {
+    db: Db, context: GraphQLContext, session?: ClientSession) {
 
     const deletionUsersQueuePosition = userList
         .map<number>(
@@ -505,7 +513,7 @@ const generateOutputByResource: Record<RequestSource, (resource: ResourceDbObjec
                 statusCode: statusCode as TicketStatusCode,
                 role: myTicket.user?.role as LocalRole,
                 ticketId: myTicket._id?.toHexString(),
-                resourceId
+                id: resourceId
             }
         }
     },
@@ -602,4 +610,4 @@ async function pushNotification(resourceName: string, resourceId: ObjectId | nul
 
 }
 
-export { getUserTicket, getResource, pushNewStatus, enqueue, forwardQueue, notifyFirstInQueue, generateOutputByResource, clearOutQueueDependantTickets, pushNotification, getAwaitingTicket, removeAwaitingConfirmation, removeUsersInQueue }
+export { getUser, getUserTicket, getResource, pushNewStatus, enqueue, forwardQueue, notifyFirstInQueue, generateOutputByResource, clearOutQueueDependantTickets, pushNotification, getAwaitingTicket, removeAwaitingConfirmation, removeUsersInQueue }

@@ -1,12 +1,10 @@
 
-import express from "express";
-
 import { getLoadedEnvVariables } from "../utils/env-loader";
 
 import * as webPush from "web-push"
 
 
-function initializeWebPush(app: express.Express) {
+function initializeWebPush() {
 
     // Web Push
     // API

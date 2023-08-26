@@ -34,7 +34,7 @@
       ]
     },
     "typeRoots": [                            /* List of folders to include type definitions from. */
-      "./node_modules/@types/node"
+      "./node_modules/@types"
     ],
     "types": [                                /* Type declaration files to be included in compilation. */
          "node"
