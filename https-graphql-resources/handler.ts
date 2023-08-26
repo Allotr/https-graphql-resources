@@ -48,10 +48,9 @@ function onServerCreated(app: TemplatedApp) {
       useGraphQlJit(),
       useParserCache(),
       useResponseCache({
-        session: (request) => {
-          const cookieList = request.headers.get('cookie') ?? "";
-          const parsedCookie = cookie.parse(cookieList);
-          return parsedCookie?.['connect.sid'];
+        // cache based on the authorization header
+        session: request => {
+          return request.headers.get('authorization')
         },
         cache
       })
