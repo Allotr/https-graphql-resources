@@ -4,6 +4,6 @@ provider:
   gateway: https://openfaas.allotr.eu
 functions:
   https-graphql-resources:
-    lang: node-typescript-express
+    lang: node-typescript-uwebsockets
     handler: ./https-graphql-resources
     image: rafaelpernil/https-graphql-resources:latest
