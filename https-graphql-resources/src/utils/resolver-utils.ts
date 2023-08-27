@@ -362,7 +362,7 @@ async function clearOutQueueDependantTickets(
             const args = argMap[status](new ObjectId(resource?._id ?? "").toHexString() ?? "", RequestSource.Resource)
             const functionContext = {
                 ...context,
-                // user: await getUser(new ObjectId(user.id), db, session)
+                user: await getUser(new ObjectId(user.id), db, session)
             }
             await functionMap[status]?.(undefined, args, functionContext);
         } catch (e) {

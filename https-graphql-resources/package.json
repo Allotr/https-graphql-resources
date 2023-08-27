@@ -14,19 +14,25 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@types/cookie": "^0.5.1",
+    "@types/cookie-parser": "^1.4.3",
     "@types/express-session": "^1.17.4",
     "@types/web-push": "^3.3.2",
-    "typescript": "^5.2.2",
-    "@types/cookie": "^0.5.1",
-    "@types/cookie-parser": "^1.4.3"
+    "typescript": "^5.2.2"
   },
   "dependencies": {
+    "@envelop/graphql-jit": "^6.0.1",
+    "@envelop/parser-cache": "^6.0.1",
+    "@envelop/response-cache-redis": "^3.1.0",
     "@graphql-codegen/typescript-mongodb": "^2.1.0",
     "@graphql-tools/schema": "^8.1.2",
     "@graphql-tools/stitching-directives": "^3.0.0",
     "@graphql-tools/utils": "^8.1.1",
-    "allotr-graphql-schema-types": "3.0.2",
+    "@graphql-yoga/plugin-response-cache": "^2.1.1",
+    "allotr-graphql-schema-types": "3.0.3",
     "connect-mongo": "^4.5.0",
+    "cookie": "^0.5.0",
+    "cookie-parser": "^1.4.6",
     "dotenv": "^16.3.1",
     "express-session": "^1.17.2",
     "graphql": "^15.5.0",
@@ -34,16 +40,10 @@
     "graphql-jit": "^0.8.4",
     "graphql-redis-subscriptions": "^2.4.0",
     "graphql-subscriptions": "^1.2.1",
-    "ioredis": "^4.27.8",
-    "mongodb": "^4.1.0",
-    "web-push": "^3.6.4",
-    "@envelop/graphql-jit": "^6.0.1",
-    "@envelop/parser-cache": "^6.0.1",
-    "@envelop/response-cache-redis": "^3.1.0",
-    "@graphql-yoga/plugin-response-cache": "^2.1.1",
-    "cookie": "^0.5.0",
-    "cookie-parser": "^1.4.6",
     "graphql-yoga": "^4.0.4",
-    "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.31.0"
+    "ioredis": "^5.3.2",
+    "mongodb": "^4.1.0",
+    "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.31.0",
+    "web-push": "^3.6.4"
   }
 }

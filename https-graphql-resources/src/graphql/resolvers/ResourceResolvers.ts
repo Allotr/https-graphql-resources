@@ -1,5 +1,5 @@
 
-import { Resolvers, OperationResult, ResourceDbObject, UserDbObject, LocalRole, TicketStatusCode, ErrorCode, ResourceManagementResult, TicketViewUserInfo, TicketView, TicketStatus, ResourceUser, UpdateResult, ResourceNotificationDbObject } from "allotr-graphql-schema-types";
+import { Resolvers, OperationResult, ResourceDbObject, UserDbObject, LocalRole, TicketStatusCode, ErrorCode, ResourceManagementResult, TicketViewUserInfo, TicketView, TicketStatus, ResourceUser, UpdateResult, ResourceNotificationDbObject, ResolversTypes } from "allotr-graphql-schema-types";
 import { ObjectId, ReadPreference, WriteConcern, ReadConcern, TransactionOptions } from "mongodb"
 import { categorizeArrayData, customTryCatch, getFirstQueuePosition, getLastStatus } from "../../utils/data-util";
 import { CustomTryCatch } from "../../types/custom-try-catch";
@@ -8,6 +8,7 @@ import { enqueue, forwardQueue, generateOutputByResource, getResource, pushNotif
 import { NOTIFICATIONS, RESOURCES, USERS } from "../../consts/collections";
 import { CategorizedArrayData } from "../../types/categorized-array-data";
 import { GraphQLContext } from "../../types/yoga-context";
+import { deleteAllResourceCachedData } from "../../utils/connection-utils";
 
 
 export const ResourceResolvers: Resolvers = {
@@ -38,27 +39,28 @@ export const ResourceResolvers: Resolvers = {
                 creationDate: 1
             }).toArray();
 
-            const resourceList = myCurrentTicket
-                .map(({ _id, creationDate, createdBy, lastModificationDate, maxActiveTickets, name, tickets, description, activeUserCount }) => {
-                    const myTicket = tickets?.[0];
-                    const { statusCode, timestamp: lastStatusTimestamp, queuePosition } = getLastStatus(myTicket);
-                    return {
-                        activeUserCount,
-                        creationDate,
-                        createdBy: { userId: createdBy?._id?.toHexString(), username: createdBy?.username ?? "" },
-                        lastModificationDate,
-                        maxActiveTickets,
-                        name,
-                        queuePosition,
-                        description,
-                        lastStatusTimestamp,
-                        statusCode: statusCode as TicketStatusCode,
-                        role: myTicket.user?.role as LocalRole,
-                        ticketId: myTicket._id?.toHexString(),
-                        id: _id?.toHexString() ?? ""
-                    }
-
-                })
+            const resourceList: Array<ResolversTypes['ResourceCard']> = [];
+            const arrayLength = myCurrentTicket.length
+            for (let index = 0; index < arrayLength; index++) {
+                const { _id, creationDate, createdBy, lastModificationDate, maxActiveTickets, name, tickets, description, activeUserCount } = myCurrentTicket[index];
+                const myTicket = tickets?.[0];
+                const { statusCode, timestamp: lastStatusTimestamp, queuePosition } = getLastStatus(myTicket);
+                resourceList.push({
+                    activeUserCount,
+                    creationDate,
+                    createdBy: { userId: createdBy?._id?.toHexString(), username: createdBy?.username ?? "" },
+                    lastModificationDate,
+                    maxActiveTickets,
+                    name,
+                    queuePosition,
+                    description,
+                    lastStatusTimestamp,
+                    statusCode: statusCode as TicketStatusCode,
+                    role: myTicket.user?.role as LocalRole,
+                    ticketId: myTicket._id?.toHexString(),
+                    id: _id?.toHexString() ?? ""
+                });
+            }
 
             return resourceList;
         },
@@ -99,39 +101,67 @@ export const ResourceResolvers: Resolvers = {
             }
 
             for (const user of userDataList) {
-                userDataMap[user._id?.toHexString() ?? ""] = {
-                    ...userDataMap[user._id?.toHexString() ?? ""],
-                    userId: user._id?.toHexString(),
+                const userId = user._id?.toHexString() ?? "";
+                userDataMap[userId] = {
+                    userId: userId,
                     name: user.name ?? "",
                     surname: user.surname ?? "",
                     username: user.username ?? "",
+                    role: LocalRole.ResourceUser // Default role to be replaced later
                 }
             }
+
             // Add the role to the map
             for (const { user } of tickets) {
-                userDataMap[user._id?.toHexString() ?? ""] = { ...userDataMap[user._id?.toHexString() ?? ""], role: user.role as LocalRole }
+                userDataMap[user._id?.toHexString() ?? ""].role = user.role as LocalRole;
             }
 
-            const ticketList = tickets.map<TicketView>(ticket => {
-                const { creationDate, user, _id } = ticket;
-                return {
-                    ticketId: _id?.toHexString(),
-                    creationDate,
-                    user: userDataMap[user._id?.toHexString() ?? ""],
-                    lastStatus: getLastStatus(ticket) as TicketStatus
+            const ticketList: Record<TicketStatusCode, TicketView[]> = {
+                ACTIVE: [],
+                AWAITING_CONFIRMATION: [],
+                QUEUED: [],
+                INACTIVE: [],
+                INITIALIZED: [],
+                // These are not used
+                REQUESTING: [],
+                REVOKED: []
+            };
+            const ticketListLength = tickets.length;
+            for (let index = 0; index < ticketListLength; index++) {
+                const ticket = tickets[index];
+                const lastStatus = getLastStatus(ticket) as TicketStatus;
+                const statusCode = lastStatus.statusCode;
+                // Exclude invalid statuses
+                if (
+                    statusCode === TicketStatusCode.Requesting ||
+                    statusCode === TicketStatusCode.Revoked
+                ) {
+                    continue;
                 }
-            }).filter(({ lastStatus }) => {
-                return [TicketStatusCode.Requesting, TicketStatusCode.Revoked].every(code => code !== lastStatus.statusCode)
-            });
 
-            const filteredTicketList = [
-                ...ticketList.filter(({ lastStatus }) => lastStatus.statusCode === TicketStatusCode.Active),
-                ...ticketList.filter(({ lastStatus }) => lastStatus.statusCode === TicketStatusCode.AwaitingConfirmation),
-                ...ticketList.filter(({ lastStatus }) => lastStatus.statusCode === TicketStatusCode.Queued).sort((a, b) =>
-                    (a.lastStatus.queuePosition ?? 0) - (b.lastStatus.queuePosition ?? 0)
-                ),
-                ...ticketList.filter(({ lastStatus }) => [TicketStatusCode.Inactive, TicketStatusCode.Initialized].includes(lastStatus.statusCode)),
-            ]
+                ticketList[statusCode].push({
+                    ticketId: ticket?._id?.toHexString(),
+                    creationDate: ticket?.creationDate,
+                    user: userDataMap[ticket?.user._id?.toHexString() ?? ""],
+                    lastStatus
+                })
+            }
+
+            // const filteredTicketList = [
+            //     ticketList[TicketStatusCode.Active],
+            //     ticketList[TicketStatusCode.AwaitingConfirmation],
+            //     ticketList[TicketStatusCode.Queued],
+            //     ticketList[TicketStatusCode.Inactive],
+            //     ticketList[TicketStatusCode.Initialized]
+            // ]
+
+            const filteredTicketList = ticketList[TicketStatusCode.Active].concat(ticketList[TicketStatusCode.Active],
+                ticketList[TicketStatusCode.AwaitingConfirmation],
+                ticketList[TicketStatusCode.Queued],
+                ticketList[TicketStatusCode.Inactive],
+                ticketList[TicketStatusCode.Initialized])
+
+
 
             return {
                 id: resourceId,
@@ -215,6 +245,12 @@ export const ResourceResolvers: Resolvers = {
             if (result == null) {
                 return { status: OperationResult.Error, newObjectId: null };
             }
+
+
+            context?.cache?.invalidate([{ typename: 'ResourceCard' }])
+            context?.cache?.invalidate([{ typename: 'ResourceNotification' }])
+
+            await deleteAllResourceCachedData(context?.redisConnection?.connection);
 
             return { status: OperationResult.Ok, newObjectId: result.insertedId.toHexString() };
         },
@@ -365,8 +401,11 @@ export const ResourceResolvers: Resolvers = {
                 return result;
             }
 
-            context?.cache?.invalidate([{ typename: 'ResourceView', id }])
-            context?.cache?.invalidate([{ typename: 'ResourceCard', id }])
+            context?.cache?.invalidate([{ typename: 'ResourceView', id: id! }])
+            context?.cache?.invalidate([{ typename: 'ResourceCard', id: id! }])
+            context?.cache?.invalidate([{ typename: 'ResourceNotification' }])
+
+            await deleteAllResourceCachedData(context?.redisConnection?.connection);
 
             return { status: OperationResult.Ok };
         },
@@ -383,17 +422,19 @@ export const ResourceResolvers: Resolvers = {
             const deleteResult = await db.collection<ResourceDbObject>(RESOURCES).deleteOne({ _id: new ObjectId(resourceId) })
 
             // Delete notifications
-            const deleteNotificationResult = await db.collection<ResourceNotificationDbObject>(NOTIFICATIONS).deleteMany({
+            await db.collection<ResourceNotificationDbObject>(NOTIFICATIONS).deleteMany({
                 "resource._id": new ObjectId(resourceId ?? "")
             })
 
-            if (!deleteResult.deletedCount || !deleteNotificationResult.deletedCount) {
-                // console.log("Has not deleted the resource or notifications");
+            if (!deleteResult.deletedCount) {
                 return { status: OperationResult.Error }
             }
 
             context?.cache?.invalidate([{ typename: 'ResourceView', id: resourceId }])
             context?.cache?.invalidate([{ typename: 'ResourceCard', id: resourceId }])
+            context?.cache?.invalidate([{ typename: 'ResourceNotification' }])
+
+            await deleteAllResourceCachedData(context?.redisConnection?.connection);
 
             return { status: OperationResult.Ok };
         },
@@ -453,7 +494,11 @@ export const ResourceResolvers: Resolvers = {
 
 
                 }, transactionOptions);
-            } finally {
+            }
+            catch (error) {
+                // Implement if needed
+            }
+            finally {
                 await session.endSession();
             }
             if (result.status === OperationResult.Error) {
@@ -504,7 +549,11 @@ export const ResourceResolvers: Resolvers = {
                     // Change status to active
                     await removeAwaitingConfirmation(resourceId, firstQueuePosition, session, db)
                 }, transactionOptions);
-            } finally {
+            }
+            catch (error) {
+                // Implement if needed
+            }
+            finally {
                 await session.endSession();
             }
 
@@ -526,7 +575,11 @@ export const ResourceResolvers: Resolvers = {
 
 
                 }, transactionOptions);
-            } finally {
+            }
+            catch (error) {
+                // Implement if needed
+            }
+            finally {
                 await session2.endSession();
             }
             if (result.status === OperationResult.Error) {
@@ -542,6 +595,7 @@ export const ResourceResolvers: Resolvers = {
 
             context?.cache?.invalidate([{ typename: 'ResourceView', id: resourceId }])
             context?.cache?.invalidate([{ typename: 'ResourceCard', id: resourceId }])
+            context?.cache?.invalidate([{ typename: 'ResourceNotification' }])
 
             // Status changed, now let's return the new resource
             return generateOutputByResource["HOME"](resource, new ObjectId(context?.user?._id ?? ""), resourceId, db);
@@ -576,7 +630,11 @@ export const ResourceResolvers: Resolvers = {
                     // Remove our awaiting confirmation
                     await removeAwaitingConfirmation(resourceId, firstQueuePosition, session, db)
                 }, transactionOptions);
-            } finally {
+            }
+            catch (error) {
+                // Implement if needed
+            }
+            finally {
                 await session.endSession();
             }
 
@@ -598,7 +656,11 @@ export const ResourceResolvers: Resolvers = {
 
 
                 }, transactionOptions);
-            } finally {
+            }
+            catch (error) {
+                // Implement if needed
+            }
+            finally {
                 await session2.endSession();
             }
             if (result.status === OperationResult.Error) {
@@ -619,6 +681,7 @@ export const ResourceResolvers: Resolvers = {
 
             context?.cache?.invalidate([{ typename: 'ResourceView', id: resourceId }])
             context?.cache?.invalidate([{ typename: 'ResourceCard', id: resourceId }])
+            context?.cache?.invalidate([{ typename: 'ResourceNotification' }])
 
             // Status changed, now let's return the new resource
             return generateOutputByResource["HOME"](resource, new ObjectId(context?.user?._id ?? ""), resourceId, db);
@@ -657,7 +720,11 @@ export const ResourceResolvers: Resolvers = {
                     // Notify our next in queue user
                     await notifyFirstInQueue(resourceId, timestamp, firstQueuePosition, db, session);
                 }, transactionOptions);
-            } finally {
+            }
+            catch (error) {
+                // Implement if needed
+            }
+            finally {
                 await session.endSession();
             }
             if (result.status === OperationResult.Error) {
@@ -680,6 +747,7 @@ export const ResourceResolvers: Resolvers = {
 
             context?.cache?.invalidate([{ typename: 'ResourceView', id: resourceId }])
             context?.cache?.invalidate([{ typename: 'ResourceCard', id: resourceId }])
+            context?.cache?.invalidate([{ typename: 'ResourceNotification' }])
 
 
             // Status changed, now let's return the new resource

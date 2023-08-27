@@ -6,7 +6,6 @@ import { createYoga } from "graphql-yoga";
 import { TemplatedApp } from "uWebSockets.js";
 import { useGraphQlJit } from '@envelop/graphql-jit'
 import { useParserCache } from "@envelop/parser-cache";
-import cookie from "cookie";
 
 import { useResponseCache, UseResponseCacheParameter } from '@graphql-yoga/plugin-response-cache'
 import { createRedisCache } from '@envelop/response-cache-redis'
