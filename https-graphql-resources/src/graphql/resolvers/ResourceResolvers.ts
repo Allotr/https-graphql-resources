@@ -8,7 +8,6 @@ import { enqueue, forwardQueue, generateOutputByResource, getResource, pushNotif
 import { NOTIFICATIONS, RESOURCES, USERS } from "../../consts/collections";
 import { CategorizedArrayData } from "../../types/categorized-array-data";
 import { GraphQLContext } from "../../types/yoga-context";
-import { deleteAllResourceCachedData } from "../../utils/connection-utils";
 
 
 export const ResourceResolvers: Resolvers = {
@@ -248,10 +247,10 @@ export const ResourceResolvers: Resolvers = {
             }
 
 
-            context?.cache?.invalidate([{ typename: 'ResourceCard' }])
-            context?.cache?.invalidate([{ typename: 'ResourceNotification' }])
+            context?.cache?.invalidate([
+                { typename: 'ResourceCard' }
+            ])
 
-            await deleteAllResourceCachedData(context?.redisConnection?.connection);
 
             return { status: OperationResult.Ok, newObjectId: result.insertedId.toHexString() };
         },
@@ -402,11 +401,12 @@ export const ResourceResolvers: Resolvers = {
                 return result;
             }
 
-            context?.cache?.invalidate([{ typename: 'ResourceView', id: id! }])
-            context?.cache?.invalidate([{ typename: 'ResourceCard', id: id! }])
-            context?.cache?.invalidate([{ typename: 'ResourceNotification' }])
+            context?.cache?.invalidate([
+                { typename: 'ResourceView' },
+                { typename: 'ResourceCard' }
+            ])
 
-            await deleteAllResourceCachedData(context?.redisConnection?.connection);
+            // await deleteAllResourceCachedData(context?.redisConnection?.connection);
 
             return { status: OperationResult.Ok };
         },
@@ -431,11 +431,11 @@ export const ResourceResolvers: Resolvers = {
                 return { status: OperationResult.Error }
             }
 
-            context?.cache?.invalidate([{ typename: 'ResourceView', id: resourceId }])
-            context?.cache?.invalidate([{ typename: 'ResourceCard', id: resourceId }])
-            context?.cache?.invalidate([{ typename: 'ResourceNotification' }])
+            context?.cache?.invalidate([
+                { typename: 'ResourceView' },
+                { typename: 'ResourceCard' }
+            ])
 
-            await deleteAllResourceCachedData(context?.redisConnection?.connection);
 
             return { status: OperationResult.Ok };
         },
@@ -469,8 +469,7 @@ export const ResourceResolvers: Resolvers = {
                         activeUserCount = 0,
                         maxActiveTickets = 0,
                         previousStatusCode,
-                        lastQueuePosition,
-                        firstQueuePosition
+                        lastQueuePosition
                     } = await canRequestStatusChange(new ObjectId(context?.user?._id ?? ""), resourceId, TicketStatusCode.Requesting, timestamp, db, session);
 
                     if (!canRequest) {
@@ -514,8 +513,10 @@ export const ResourceResolvers: Resolvers = {
                 return { status: OperationResult.Error }
             }
 
-            context?.cache?.invalidate([{ typename: 'ResourceView', id: resourceId }])
-            context?.cache?.invalidate([{ typename: 'ResourceCard', id: resourceId }])
+            context?.cache?.invalidate([
+                { typename: 'ResourceView' },
+                { typename: 'ResourceCard' }
+            ])
 
             // Status changed, now let's return the new resource
             return generateOutputByResource[requestFrom](resource, new ObjectId(context?.user?._id ?? ""), resourceId, db);
@@ -594,9 +595,10 @@ export const ResourceResolvers: Resolvers = {
                 return { status: OperationResult.Error }
             }
 
-            context?.cache?.invalidate([{ typename: 'ResourceView', id: resourceId }])
-            context?.cache?.invalidate([{ typename: 'ResourceCard', id: resourceId }])
-            context?.cache?.invalidate([{ typename: 'ResourceNotification' }])
+            context?.cache?.invalidate([
+                { typename: 'ResourceView' },
+                { typename: 'ResourceCard' }
+            ])
 
             // Status changed, now let's return the new resource
             return generateOutputByResource["HOME"](resource, new ObjectId(context?.user?._id ?? ""), resourceId, db);
@@ -680,9 +682,10 @@ export const ResourceResolvers: Resolvers = {
 
             await pushNotification(resource?.name, resource?._id, resource?.createdBy?._id, resource?.createdBy?.username, timestamp, db);
 
-            context?.cache?.invalidate([{ typename: 'ResourceView', id: resourceId }])
-            context?.cache?.invalidate([{ typename: 'ResourceCard', id: resourceId }])
-            context?.cache?.invalidate([{ typename: 'ResourceNotification' }])
+            context?.cache?.invalidate([
+                { typename: 'ResourceView' },
+                { typename: 'ResourceCard' }
+            ])
 
             // Status changed, now let's return the new resource
             return generateOutputByResource["HOME"](resource, new ObjectId(context?.user?._id ?? ""), resourceId, db);
@@ -746,10 +749,10 @@ export const ResourceResolvers: Resolvers = {
             await pushNotification(resource?.name, resource?._id, resource?.createdBy?._id, resource?.createdBy?.username, timestamp, db);
 
 
-            context?.cache?.invalidate([{ typename: 'ResourceView', id: resourceId }])
-            context?.cache?.invalidate([{ typename: 'ResourceCard', id: resourceId }])
-            context?.cache?.invalidate([{ typename: 'ResourceNotification' }])
-
+            context?.cache?.invalidate([
+                { typename: 'ResourceView' },
+                { typename: 'ResourceCard' }
+            ])
 
             // Status changed, now let's return the new resource
             return generateOutputByResource[requestFrom](resource, new ObjectId(context?.user?._id ?? ""), resourceId, db);

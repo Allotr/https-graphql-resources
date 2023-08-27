@@ -13,6 +13,8 @@ import { getUserInfoFromRequest, initializeSessionStore, logoutSession } from ".
 import { corsRequestHandler } from "./src/middlewares/cors";
 import { ServerContext, UserContext } from "./src/types/yoga-context";
 import { initializeWebPush } from "./src/notifications/web-push";
+import { queryNames } from "./src/consts/query-names";
+import _ from "lodash";
 
 
 function onServerCreated(app: TemplatedApp) {
@@ -50,6 +52,17 @@ function onServerCreated(app: TemplatedApp) {
         // cache based on the authorization header
         session: request => {
           return request.headers.get('authorization')
+        },
+        shouldCacheResult: ({ result }) => {
+          const functionBlacklist = [
+            // Add functions to blacklist
+          ]
+
+          const data = result?.data as any;
+          const isEmptyValue = queryNames.some(query => data?.[query] != null && _.isEmpty(data?.[query]))
+          const isValidFunction = functionBlacklist.every(key => data?.[key] == null);
+
+          return !isEmptyValue && isValidFunction
         },
         cache
       })
