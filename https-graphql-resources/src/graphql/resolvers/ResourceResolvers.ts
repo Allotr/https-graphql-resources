@@ -155,11 +155,12 @@ export const ResourceResolvers: Resolvers = {
             //     ticketList[TicketStatusCode.Initialized]
             // ]
 
-            const filteredTicketList = ticketList[TicketStatusCode.Active].concat(ticketList[TicketStatusCode.Active],
+            const filteredTicketList = ticketList[TicketStatusCode.Active].concat(
                 ticketList[TicketStatusCode.AwaitingConfirmation],
                 ticketList[TicketStatusCode.Queued],
                 ticketList[TicketStatusCode.Inactive],
-                ticketList[TicketStatusCode.Initialized])
+                ticketList[TicketStatusCode.Initialized]
+            )
 
 
 
