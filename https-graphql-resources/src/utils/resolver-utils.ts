@@ -263,8 +263,10 @@ async function clearOutQueueDependantTickets(
             await pushNotification(resource?.name, resource?._id, resource?.createdBy?._id, resource?.createdBy?.username, timestamp, db);
 
 
-            context?.cache?.invalidate([{ typename: 'ResourceView', id: resourceId }])
-            context?.cache?.invalidate([{ typename: 'ResourceCard', id: resourceId }])
+            context?.cache?.invalidate([
+                { typename: 'ResourceView' },
+                { typename: 'ResourceCard' }
+            ])
 
 
             // Status changed, now let's return the new resource
@@ -341,8 +343,10 @@ async function clearOutQueueDependantTickets(
 
             await pushNotification(resource?.name, resource?._id, resource?.createdBy?._id, resource?.createdBy?.username, timestamp, db);
 
-            context?.cache?.invalidate([{ typename: 'ResourceView', id: resourceId }])
-            context?.cache?.invalidate([{ typename: 'ResourceCard', id: resourceId }])
+            context?.cache?.invalidate([
+                { typename: 'ResourceView' },
+                { typename: 'ResourceCard' }
+            ])
 
             // Status changed, now let's return the new resource
             return generateOutputByResource["HOME"](resource, new ObjectId(context?.user?._id ?? ""), resourceId, db);
