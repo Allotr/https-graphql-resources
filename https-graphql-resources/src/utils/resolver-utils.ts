@@ -239,6 +239,10 @@ async function clearOutQueueDependantTickets(
                     await notifyFirstInQueue(resourceId, timestamp, firstQueuePosition, db, session);
                 }, transactionOptions);
             } finally {
+                await context?.cache?.invalidate([
+                    { typename: 'ResourceView' },
+                    { typename: 'ResourceCard' }
+                ])
                 await session.endSession();
             }
             if (result.status === OperationResult.Error) {
@@ -259,7 +263,7 @@ async function clearOutQueueDependantTickets(
             await pushNotification(resource?.name, resource?._id, resource?.createdBy?._id, resource?.createdBy?.username, timestamp, db);
 
 
-            context?.cache?.invalidate([
+            await context?.cache?.invalidate([
                 { typename: 'ResourceView' },
                 { typename: 'ResourceCard' }
             ])
@@ -299,6 +303,10 @@ async function clearOutQueueDependantTickets(
                     await removeAwaitingConfirmation(resourceId, firstQueuePosition, session, db)
                 }, transactionOptions);
             } finally {
+                await context?.cache?.invalidate([
+                    { typename: 'ResourceView' },
+                    { typename: 'ResourceCard' }
+                ])
                 await session.endSession();
             }
 
@@ -321,6 +329,10 @@ async function clearOutQueueDependantTickets(
 
                 }, transactionOptions);
             } finally {
+                await context?.cache?.invalidate([
+                    { typename: 'ResourceView' },
+                    { typename: 'ResourceCard' }
+                ])
                 await session2.endSession();
             }
             if (result.status === OperationResult.Error) {
@@ -339,7 +351,7 @@ async function clearOutQueueDependantTickets(
 
             await pushNotification(resource?.name, resource?._id, resource?.createdBy?._id, resource?.createdBy?.username, timestamp, db);
 
-            context?.cache?.invalidate([
+            await context?.cache?.invalidate([
                 { typename: 'ResourceView' },
                 { typename: 'ResourceCard' }
             ])

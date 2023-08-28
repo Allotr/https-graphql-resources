@@ -247,7 +247,7 @@ export const ResourceResolvers: Resolvers = {
             }
 
 
-            context?.cache?.invalidate([
+            await context?.cache?.invalidate([
                 { typename: 'ResourceCard' }
             ])
 
@@ -314,6 +314,10 @@ export const ResourceResolvers: Resolvers = {
                     await clearOutQueueDependantTickets(resource, categorizedUserData.delete, context, TicketStatusCode.AwaitingConfirmation, db, sessionInit);
                 }, transactionOptions);
             } finally {
+                await context?.cache?.invalidate([
+                    { typename: 'ResourceView' },
+                    { typename: 'ResourceCard' }
+                ])
                 await sessionInit.endSession();
             }
 
@@ -394,6 +398,10 @@ export const ResourceResolvers: Resolvers = {
                     }
                 }, transactionOptions);
             } finally {
+                await context?.cache?.invalidate([
+                    { typename: 'ResourceView' },
+                    { typename: 'ResourceCard' }
+                ])
                 await session.endSession();
             }
 
@@ -401,12 +409,6 @@ export const ResourceResolvers: Resolvers = {
                 return result;
             }
 
-            context?.cache?.invalidate([
-                { typename: 'ResourceView' },
-                { typename: 'ResourceCard' }
-            ])
-
-            // await deleteAllResourceCachedData(context?.redisConnection?.connection);
 
             return { status: OperationResult.Ok };
         },
@@ -431,7 +433,7 @@ export const ResourceResolvers: Resolvers = {
                 return { status: OperationResult.Error }
             }
 
-            context?.cache?.invalidate([
+            await context?.cache?.invalidate([
                 { typename: 'ResourceView' },
                 { typename: 'ResourceCard' }
             ])
@@ -499,6 +501,10 @@ export const ResourceResolvers: Resolvers = {
                 // Implement if needed
             }
             finally {
+                await context?.cache?.invalidate([
+                    { typename: 'ResourceView' },
+                    { typename: 'ResourceCard' }
+                ])
                 await session.endSession();
             }
             if (result.status === OperationResult.Error) {
@@ -513,10 +519,6 @@ export const ResourceResolvers: Resolvers = {
                 return { status: OperationResult.Error }
             }
 
-            context?.cache?.invalidate([
-                { typename: 'ResourceView' },
-                { typename: 'ResourceCard' }
-            ])
 
             // Status changed, now let's return the new resource
             return generateOutputByResource[requestFrom](resource, new ObjectId(context?.user?._id ?? ""), resourceId, db);
@@ -556,6 +558,10 @@ export const ResourceResolvers: Resolvers = {
                 // Implement if needed
             }
             finally {
+                await context?.cache?.invalidate([
+                    { typename: 'ResourceView' },
+                    { typename: 'ResourceCard' }
+                ])
                 await session.endSession();
             }
 
@@ -582,6 +588,10 @@ export const ResourceResolvers: Resolvers = {
                 // Implement if needed
             }
             finally {
+                await context?.cache?.invalidate([
+                    { typename: 'ResourceView' },
+                    { typename: 'ResourceCard' }
+                ])
                 await session2.endSession();
             }
             if (result.status === OperationResult.Error) {
@@ -594,11 +604,6 @@ export const ResourceResolvers: Resolvers = {
             if (resource == null) {
                 return { status: OperationResult.Error }
             }
-
-            context?.cache?.invalidate([
-                { typename: 'ResourceView' },
-                { typename: 'ResourceCard' }
-            ])
 
             // Status changed, now let's return the new resource
             return generateOutputByResource["HOME"](resource, new ObjectId(context?.user?._id ?? ""), resourceId, db);
@@ -638,6 +643,10 @@ export const ResourceResolvers: Resolvers = {
                 // Implement if needed
             }
             finally {
+                await context?.cache?.invalidate([
+                    { typename: 'ResourceView' },
+                    { typename: 'ResourceCard' }
+                ])
                 await session.endSession();
             }
 
@@ -664,6 +673,10 @@ export const ResourceResolvers: Resolvers = {
                 // Implement if needed
             }
             finally {
+                await context?.cache?.invalidate([
+                    { typename: 'ResourceView' },
+                    { typename: 'ResourceCard' }
+                ])
                 await session2.endSession();
             }
             if (result.status === OperationResult.Error) {
@@ -682,7 +695,7 @@ export const ResourceResolvers: Resolvers = {
 
             await pushNotification(resource?.name, resource?._id, resource?.createdBy?._id, resource?.createdBy?.username, timestamp, db);
 
-            context?.cache?.invalidate([
+            await context?.cache?.invalidate([
                 { typename: 'ResourceView' },
                 { typename: 'ResourceCard' }
             ])
@@ -729,6 +742,10 @@ export const ResourceResolvers: Resolvers = {
                 // Implement if needed
             }
             finally {
+                await context?.cache?.invalidate([
+                    { typename: 'ResourceView' },
+                    { typename: 'ResourceCard' }
+                ])
                 await session.endSession();
             }
             if (result.status === OperationResult.Error) {
@@ -749,10 +766,6 @@ export const ResourceResolvers: Resolvers = {
             await pushNotification(resource?.name, resource?._id, resource?.createdBy?._id, resource?.createdBy?.username, timestamp, db);
 
 
-            context?.cache?.invalidate([
-                { typename: 'ResourceView' },
-                { typename: 'ResourceCard' }
-            ])
 
             // Status changed, now let's return the new resource
             return generateOutputByResource[requestFrom](resource, new ObjectId(context?.user?._id ?? ""), resourceId, db);
