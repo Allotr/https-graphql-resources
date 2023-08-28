@@ -25,19 +25,37 @@ function getLastStatus(myTicket?: TicketDbObject): TicketStatusDbObject {
 }
 
 function getLastQueuePosition(tickets: TicketDbObject[] | undefined = []): number {
-    return tickets.reduce<number>((lastPosition, ticket) => {
+    let maxPosition = 0;
+    const ticketsLength = tickets.length;
+    for (let index = 0; index < ticketsLength; index++) {
+        const ticket = tickets[index];
+        
         const { queuePosition } = getLastStatus(ticket);
-        const processedQueuePosition = queuePosition ?? 0;
-        return lastPosition > processedQueuePosition ? lastPosition : processedQueuePosition;
-    }, 0) ?? 0;
+        const parsedQueuePosition = queuePosition ?? 0;
+        
+        if (parsedQueuePosition > maxPosition){
+            maxPosition = parsedQueuePosition;
+        }
+    }
+
+    return maxPosition;
 }
 
 function getFirstQueuePosition(tickets: TicketDbObject[] | undefined = []): number {
-    return tickets.reduce<number>((firstPosition, ticket) => {
+    let minPosition = Number.MAX_SAFE_INTEGER;
+    const ticketsLength = tickets.length;
+    for (let index = 0; index < ticketsLength; index++) {
+        const ticket = tickets[index];
+        
         const { queuePosition } = getLastStatus(ticket);
-        const processedQueuePosition = queuePosition ?? Number.MAX_SAFE_INTEGER;
-        return firstPosition < processedQueuePosition ? firstPosition : processedQueuePosition;
-    }, Number.MAX_SAFE_INTEGER) ?? 1;
+        const parsedQueuePosition = queuePosition ?? Number.MAX_SAFE_INTEGER;
+        
+        if (parsedQueuePosition < minPosition){
+            minPosition = parsedQueuePosition;
+        }
+    }
+
+    return minPosition;
 }
 
 function categorizeArrayData<T extends { id: string }>(previousList: T[], newList: T[]): CategorizedArrayData<T> {

@@ -1,4 +1,4 @@
-import { OperationResult, ResourceDbObject, UserDbObject, LocalRole, TicketStatusCode, RequestSource, ResourceManagementResult, ResourceNotificationDbObject, ResourceUser } from "allotr-graphql-schema-types";
+import { OperationResult, ResourceDbObject, UserDbObject, LocalRole, TicketStatusCode, RequestSource, ResourceManagementResult, ResourceNotificationDbObject, ResourceUser, TicketDbObject } from "allotr-graphql-schema-types";
 import { ObjectId, ClientSession, Db, ReadPreference, WriteConcern, ReadConcern, TransactionOptions } from "mongodb"
 import { generateChannelId, getFirstQueuePosition, getLastQueuePosition, getLastStatus } from "./data-util";
 import { NOTIFICATIONS, RESOURCES, USERS } from "../consts/collections";
@@ -35,6 +35,10 @@ async function getUserTicket(userId: string | ObjectId, resourceId: string, db: 
     }).toArray();
 
     return userTikcet;
+}
+
+function getUserTicketFromResource(userId: string | ObjectId, resource: ResourceDbObject | null | undefined): TicketDbObject | undefined {
+    return resource?.tickets?.find(({ user }) => user._id?.equals(userId));
 }
 
 async function getResource(resourceId: string, db: Db, session?: ClientSession): Promise<ResourceDbObject | null | undefined> {
@@ -610,4 +614,4 @@ async function pushNotification(resourceName: string, resourceId: ObjectId | nul
 
 }
 
-export { getUser, getUserTicket, getResource, pushNewStatus, enqueue, forwardQueue, notifyFirstInQueue, generateOutputByResource, clearOutQueueDependantTickets, pushNotification, getAwaitingTicket, removeAwaitingConfirmation, removeUsersInQueue }
+export { getUser, getUserTicket, getResource, pushNewStatus, enqueue, forwardQueue, notifyFirstInQueue, getUserTicketFromResource, generateOutputByResource, clearOutQueueDependantTickets, pushNotification, getAwaitingTicket, removeAwaitingConfirmation, removeUsersInQueue }
