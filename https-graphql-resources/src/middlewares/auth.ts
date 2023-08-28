@@ -3,7 +3,6 @@ import { Store } from "express-session";
 import MongoStore from 'connect-mongo';
 import { ObjectId } from "mongodb";
 import { GraphQLError, parse } from "graphql";
-import { GraphQLContext } from "src/types/yoga-context";
 import { GraphQLParams } from "graphql-yoga";
 
 let store: Store;

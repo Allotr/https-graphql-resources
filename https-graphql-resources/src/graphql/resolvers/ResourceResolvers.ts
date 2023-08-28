@@ -81,7 +81,7 @@ export const ResourceResolvers: Resolvers = {
             }
 
             const userDataMap: Record<string, TicketViewUserInfo> = {};
-            const userIdList = tickets.map(({ user }) => user._id);
+            const userIdList = tickets.map(({ user }) => user._id != null ? new ObjectId(user._id) : null);
 
             const userDataList = await db.collection<UserDbObject>(USERS).find(
                 {
@@ -242,7 +242,7 @@ export const ResourceResolvers: Resolvers = {
             }
             const result = await db.collection<ResourceDbObject>(RESOURCES).insertOne(newResource);
 
-            if (result == null) {
+            if (result == null || result.insertedId == null) {
                 return { status: OperationResult.Error, newObjectId: null };
             }
 
