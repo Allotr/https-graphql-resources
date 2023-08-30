@@ -8,6 +8,7 @@ import { getRedisConnection } from "./redis-connector";
 
 import { GraphQLContext } from "../types/yoga-context";
 import { canRequestStatusChange, getTargetUserId } from "../guards/guards";
+import { lockCacheWrite, unlockCacheWrite } from "../cache/lock";
 async function getUserTicket(userId: string | ObjectId, resourceId: string, db: Db, session?: ClientSession): Promise<ResourceDbObject | null> {
     const [parsedUserId, parsedResourceId] = [new ObjectId(userId), new ObjectId(resourceId)];
 
@@ -245,10 +246,12 @@ async function clearOutQueueDependantTickets(
                 // Implement if needed
             }
             finally {
+                lockCacheWrite();
                 await context?.cache?.invalidate([
                     { typename: 'ResourceView' },
                     { typename: 'ResourceCard' }
                 ])
+                unlockCacheWrite();
                 await session.endSession();
             }
             if (result.status === OperationResult.Error) {
@@ -310,10 +313,12 @@ async function clearOutQueueDependantTickets(
                 // Implement if needed
             }
             finally {
+                lockCacheWrite();
                 await context?.cache?.invalidate([
                     { typename: 'ResourceView' },
                     { typename: 'ResourceCard' }
                 ])
+                unlockCacheWrite();
                 await session.endSession();
             }
 
@@ -340,10 +345,12 @@ async function clearOutQueueDependantTickets(
                 // Implement if needed
             }
             finally {
+                lockCacheWrite();
                 await context?.cache?.invalidate([
                     { typename: 'ResourceView' },
                     { typename: 'ResourceCard' }
                 ])
+                unlockCacheWrite();
                 await session2.endSession();
             }
             if (result.status === OperationResult.Error) {
@@ -362,10 +369,12 @@ async function clearOutQueueDependantTickets(
 
             await pushNotification(resource?.name, resource?._id, resource?.createdBy?._id, resource?.createdBy?.username, timestamp, db);
 
+            lockCacheWrite();
             await context?.cache?.invalidate([
                 { typename: 'ResourceView' },
                 { typename: 'ResourceCard' }
             ])
+            unlockCacheWrite();
 
             // Status changed, now let's return the new resource
             return generateOutputByResource["HOME"](resource, userId, resourceId, db);

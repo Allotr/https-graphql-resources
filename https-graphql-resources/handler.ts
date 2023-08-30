@@ -14,6 +14,7 @@ import { corsRequestHandler } from "./src/middlewares/cors";
 import { ServerContext, UserContext } from "./src/types/yoga-context";
 import { initializeWebPush } from "./src/notifications/web-push";
 import { queryNames } from "./src/consts/query-names";
+import { isCacheWriteLocked } from "./src/cache/lock";
 import _ from "lodash";
 
 
@@ -52,6 +53,11 @@ function onServerCreated(app: TemplatedApp) {
           return request.headers.get('authorization')
         },
         shouldCacheResult: ({ result }) => {
+          // If cache writes are locked, don't cache
+          if (isCacheWriteLocked()) {
+            return false;
+          }
+
           const functionBlacklist = [
             // Add functions to blacklist
           ]
