@@ -7,7 +7,7 @@ import { TemplatedApp } from "uWebSockets.js";
 import { useGraphQlJit } from '@envelop/graphql-jit'
 import { useParserCache } from "@envelop/parser-cache";
 
-import { useResponseCache, UseResponseCacheParameter } from '@graphql-yoga/plugin-response-cache'
+import { useResponseCache, UseResponseCacheParameter } from "yoga-response-cache-custom/dist";
 import { createRedisCache } from '@envelop/response-cache-redis'
 import { getUserInfoFromRequest, initializeSessionStore, logoutSession } from "./src/middlewares/auth";
 import { corsRequestHandler } from "./src/middlewares/cors";
@@ -52,9 +52,10 @@ function onServerCreated(app: TemplatedApp) {
         session: request => {
           return request.headers.get('authorization')
         },
-        shouldCacheResult: ({ result }) => {
+        shouldCacheResult: async ({ result }) => {
           // If cache writes are locked, don't cache
-          if (isCacheWriteLocked()) {
+          const isWriteLocked = await isCacheWriteLocked();
+          if (isWriteLocked) {
             return false;
           }
 

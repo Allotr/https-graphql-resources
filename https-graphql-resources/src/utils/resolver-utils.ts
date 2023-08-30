@@ -246,12 +246,12 @@ async function clearOutQueueDependantTickets(
                 // Implement if needed
             }
             finally {
-                lockCacheWrite();
+                await lockCacheWrite();
                 await context?.cache?.invalidate([
                     { typename: 'ResourceView' },
                     { typename: 'ResourceCard' }
                 ])
-                unlockCacheWrite();
+                await unlockCacheWrite();
                 await session.endSession();
             }
             if (result.status === OperationResult.Error) {
@@ -313,12 +313,12 @@ async function clearOutQueueDependantTickets(
                 // Implement if needed
             }
             finally {
-                lockCacheWrite();
+                await lockCacheWrite();
                 await context?.cache?.invalidate([
                     { typename: 'ResourceView' },
                     { typename: 'ResourceCard' }
                 ])
-                unlockCacheWrite();
+                await unlockCacheWrite();
                 await session.endSession();
             }
 
@@ -345,12 +345,12 @@ async function clearOutQueueDependantTickets(
                 // Implement if needed
             }
             finally {
-                lockCacheWrite();
+                await lockCacheWrite();
                 await context?.cache?.invalidate([
                     { typename: 'ResourceView' },
                     { typename: 'ResourceCard' }
                 ])
-                unlockCacheWrite();
+                await unlockCacheWrite();
                 await session2.endSession();
             }
             if (result.status === OperationResult.Error) {
@@ -369,12 +369,12 @@ async function clearOutQueueDependantTickets(
 
             await pushNotification(resource?.name, resource?._id, resource?.createdBy?._id, resource?.createdBy?.username, timestamp, db);
 
-            lockCacheWrite();
+            await lockCacheWrite();
             await context?.cache?.invalidate([
                 { typename: 'ResourceView' },
                 { typename: 'ResourceCard' }
             ])
-            unlockCacheWrite();
+            await unlockCacheWrite();
 
             // Status changed, now let's return the new resource
             return generateOutputByResource["HOME"](resource, userId, resourceId, db);

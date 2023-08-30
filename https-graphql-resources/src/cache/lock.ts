@@ -1,13 +1,19 @@
-let isLocked = false;
+import { getRedisConnection } from "../utils/redis-connector";
 
-export function lockCacheWrite(){
-    isLocked = true;
+const LOCK_NAME = "allotr-resources-cache-lock";
+
+export async function lockCacheWrite(){
+    const redis = getRedisConnection().connection;
+    await redis.set(LOCK_NAME, "");
 }
 
-export function unlockCacheWrite(){
-    isLocked = false;
+export async function unlockCacheWrite(){
+    const redis = getRedisConnection().connection;
+    await redis.del(LOCK_NAME);
 }
 
-export function isCacheWriteLocked(): boolean{
-    return isLocked;
+export async function isCacheWriteLocked(): Promise<boolean>{
+    const redis = getRedisConnection().connection;
+    const keyFoundCount = await redis.exists(LOCK_NAME);
+    return keyFoundCount > 0;
 }

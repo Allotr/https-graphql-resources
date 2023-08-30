@@ -1,6 +1,6 @@
 import { UserDbObject } from "allotr-graphql-schema-types";
 import { RedisPubSub } from "graphql-redis-subscriptions";
-import { UseResponseCacheParameter } from "@graphql-yoga/plugin-response-cache";
+import { UseResponseCacheParameter } from "yoga-response-cache-custom/dist";
 import { MongoClient, Db } from "mongodb";
 import { Redis } from "ioredis";
 import { HttpRequest, HttpResponse } from "uWebSockets.js";
