@@ -152,15 +152,15 @@ export const ResourceResolvers: Resolvers = {
                 })
             }
 
-            
 
-            const filteredTicketList = 
+
+            const filteredTicketList =
                 ticketList[TicketStatusCode.Active].concat(
-                ticketList[TicketStatusCode.AwaitingConfirmation],
-                ticketList[TicketStatusCode.Queued],
-                ticketList[TicketStatusCode.Inactive],
-                ticketList[TicketStatusCode.Initialized]
-            )
+                    ticketList[TicketStatusCode.AwaitingConfirmation],
+                    ticketList[TicketStatusCode.Queued],
+                    ticketList[TicketStatusCode.Inactive],
+                    ticketList[TicketStatusCode.Initialized]
+                )
 
 
 
@@ -255,7 +255,7 @@ export const ResourceResolvers: Resolvers = {
                 { typename: 'ResourceCard' }
             ])
             unlockCacheWrite();
-            
+
             return { status: OperationResult.Ok, newObjectId: result.insertedId.toHexString() };
         },
         updateResource: async (parent, args, context: GraphQLContext) => {
@@ -427,7 +427,7 @@ export const ResourceResolvers: Resolvers = {
             const { resourceId, userId: targetUserId } = args
             const userId = getTargetUserId(context.user, targetUserId);
             const db = await (await context.mongoDBConnection).db;
-            
+
 
             const hasAdminAccess = await hasAdminAccessInResource(userId.toHexString() ?? "", resourceId, db)
             if (!hasAdminAccess) {
@@ -452,7 +452,7 @@ export const ResourceResolvers: Resolvers = {
                 { typename: 'ResourceCard' }
             ])
             unlockCacheWrite();
-            
+
             return { status: OperationResult.Ok };
         },
 
@@ -626,6 +626,13 @@ export const ResourceResolvers: Resolvers = {
             if (resource == null) {
                 return { status: OperationResult.Error }
             }
+
+            lockCacheWrite();
+            await context?.cache?.invalidate([
+                { typename: 'ResourceView' },
+                { typename: 'ResourceCard' }
+            ])
+            unlockCacheWrite();
 
             // Status changed, now let's return the new resource
             return generateOutputByResource["HOME"](resource, userId, resourceId, db);
