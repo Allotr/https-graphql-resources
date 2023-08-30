@@ -14,7 +14,7 @@ interface ServerContext {
 type UserContext = {
     mongoDBConnection: Promise<{ connection: Promise<MongoClient>, db: Promise<Db> }>;
     redisConnection: { pubsub: RedisPubSub, connection: Redis };
-    user: Pick<UserDbObject, "_id">;
+    user: UserDbObject;
     cache: UseResponseCacheParameter["cache"]
     sid: string,
     logout: (sid: string) => Promise<void>

@@ -29,13 +29,11 @@ function onServerCreated(app: TemplatedApp) {
     schema,
     context: async ({ req, res, request, params }) => {
       // Context factory gets called for every request
-      const [sid,userId] = await getUserInfoFromRequest(request, params);
+      const [sid, user] = await getUserInfoFromRequest(request, params);
       return {
         req,
         res,
-        user: {
-          _id: userId! // After login the user id is not null
-        },
+        user: user!,// After login the user is not null
         mongoDBConnection: getMongoDBConnection(),
         redisConnection: getRedisConnection(),
         sid: sid!, // After login the session id is not null
@@ -59,10 +57,14 @@ function onServerCreated(app: TemplatedApp) {
           ]
 
           const data = result?.data as any;
-          const isEmptyValue = queryNames.some(query => data?.[query] != null && _.isEmpty(data?.[query]))
+          // Check only fields in data
+          const fieldsAvailable = queryNames.filter(field=>field in (data ?? {}));
+          // Check value is not empty
+          const isValidValue = fieldsAvailable.every(query => !_.isEmpty(data?.[query]));
+          // Check function is valid
           const isValidFunction = functionBlacklist.every(key => data?.[key] == null);
 
-          return !isEmptyValue && isValidFunction
+          return isValidValue && isValidFunction
         },
         cache
       })

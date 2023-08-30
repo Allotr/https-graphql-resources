@@ -1,18 +1,20 @@
 
-import { Resolvers, OperationResult, ResourceDbObject, UserDbObject, LocalRole, TicketStatusCode, ErrorCode, ResourceManagementResult, TicketViewUserInfo, TicketView, TicketStatus, ResourceUser, UpdateResult, ResourceNotificationDbObject, ResolversTypes } from "allotr-graphql-schema-types";
+import { Resolvers, OperationResult, ResourceDbObject, UserDbObject, LocalRole, TicketStatusCode, ErrorCode, ResourceManagementResult, TicketViewUserInfo, TicketView, TicketStatus, ResourceUser, UpdateResult, ResourceNotificationDbObject, ResolversTypes, GlobalRole } from "allotr-graphql-schema-types";
 import { ObjectId, ReadPreference, WriteConcern, ReadConcern, TransactionOptions } from "mongodb"
-import { categorizeArrayData, customTryCatch, getFirstQueuePosition, getLastStatus } from "../../utils/data-util";
-import { CustomTryCatch } from "../../types/custom-try-catch";
-import { canRequestStatusChange, hasAdminAccessInResource } from "../../guards/guards";
-import { enqueue, forwardQueue, generateOutputByResource, getResource, pushNotification, notifyFirstInQueue, pushNewStatus, removeAwaitingConfirmation, removeUsersInQueue, clearOutQueueDependantTickets, getUser } from "../../utils/resolver-utils";
-import { NOTIFICATIONS, RESOURCES, USERS } from "../../consts/collections";
-import { CategorizedArrayData } from "../../types/categorized-array-data";
-import { GraphQLContext } from "../../types/yoga-context";
+import { categorizeArrayData, customTryCatch, getFirstQueuePosition, getLastStatus } from "../utils/data-util";
+import { CustomTryCatch } from "../types/custom-try-catch";
+import { canRequestStatusChange, getTargetUserId, hasAdminAccessInResource } from "../guards/guards";
+import { enqueue, forwardQueue, generateOutputByResource, getResource, pushNotification, notifyFirstInQueue, pushNewStatus, removeAwaitingConfirmation, removeUsersInQueue, clearOutQueueDependantTickets, getUser } from "../utils/resolver-utils";
+import { NOTIFICATIONS, RESOURCES, USERS } from "../consts/collections";
+import { CategorizedArrayData } from "../types/categorized-array-data";
+import { GraphQLContext } from "../types/yoga-context";
 
 
 export const ResourceResolvers: Resolvers = {
     Query: {
         myResources: async (parent, args, context: GraphQLContext) => {
+            const { userId: targetUserId } = args;
+            const userId = getTargetUserId(context.user, targetUserId);
 
             const db = await (await context.mongoDBConnection).db;
 
@@ -21,7 +23,7 @@ export const ResourceResolvers: Resolvers = {
                 "tickets.statuses.statusCode": {
                     $ne: TicketStatusCode.Revoked
                 },
-                "tickets.user._id": context.user._id
+                "tickets.user._id": userId
             }, {
                 projection: {
                     "tickets.$": 1,
@@ -64,7 +66,9 @@ export const ResourceResolvers: Resolvers = {
             return resourceList;
         },
         viewResource: async (parent, args, context: GraphQLContext) => {
-            const { resourceId } = args;
+            const { resourceId, userId: targetUserId } = args;
+            const userId = getTargetUserId(context.user, targetUserId);
+
             const db = await (await context.mongoDBConnection).db;
             const myResource = await db.collection<ResourceDbObject>(RESOURCES).findOne({
                 _id: new ObjectId(resourceId)
@@ -76,7 +80,8 @@ export const ResourceResolvers: Resolvers = {
 
             const tickets = myResource.tickets;
 
-            if (tickets.findIndex(({ user }) => user._id?.equals(context?.user?._id ?? "")) === -1) {
+            // Check that the user has a ticket in the resource
+            if (tickets.findIndex(({ user }) => user._id?.equals(userId)) === -1) {
                 return null;
             }
 
@@ -146,15 +151,10 @@ export const ResourceResolvers: Resolvers = {
                 })
             }
 
-            // const filteredTicketList = [
-            //     ticketList[TicketStatusCode.Active],
-            //     ticketList[TicketStatusCode.AwaitingConfirmation],
-            //     ticketList[TicketStatusCode.Queued],
-            //     ticketList[TicketStatusCode.Inactive],
-            //     ticketList[TicketStatusCode.Initialized]
-            // ]
+            
 
-            const filteredTicketList = ticketList[TicketStatusCode.Active].concat(
+            const filteredTicketList = 
+                ticketList[TicketStatusCode.Active].concat(
                 ticketList[TicketStatusCode.AwaitingConfirmation],
                 ticketList[TicketStatusCode.Queued],
                 ticketList[TicketStatusCode.Inactive],
@@ -179,19 +179,22 @@ export const ResourceResolvers: Resolvers = {
     Mutation: {
         // Resource CRUD operations
         createResource: async (parent, args, context: GraphQLContext) => {
-            const { name, description, maxActiveTickets, userList } = args.resource
             const timestamp = new Date();
+            const { name, description, maxActiveTickets, userList } = args.resource
+            const { userId: targetUserId } = args;
+
+            const userId = getTargetUserId(context.user, targetUserId);
 
             const db = await (await context.mongoDBConnection).db;
 
             // Check if user has entered himself as admin, it's important to do so
-            const myUserIndex = userList.findIndex(user => new ObjectId(user.id).equals(new ObjectId(context?.user?._id ?? "")));
+            const myUserIndex = userList.findIndex(user => new ObjectId(user.id).equals(userId));
             if (myUserIndex === -1) {
-                userList.push({ id: new ObjectId(new ObjectId(context?.user?._id ?? "")).toHexString(), role: LocalRole.ResourceAdmin });
+                userList.push({ id: userId.toHexString(), role: LocalRole.ResourceAdmin });
             }
 
             // Force the role of my user to be admin when creating
-            userList[myUserIndex] = { id: new ObjectId(new ObjectId(context?.user?._id ?? "")).toHexString(), role: LocalRole.ResourceAdmin }
+            userList[myUserIndex] = { id: userId.toHexString(), role: LocalRole.ResourceAdmin }
 
 
             const userNameList = userList
@@ -212,7 +215,7 @@ export const ResourceResolvers: Resolvers = {
             }
             const userNameMap = Object.fromEntries(userListResult.map(([id, { result: user }]) => [id, user?.username ?? ""]));
 
-            const fullUser = await getUser(context.user._id, db);
+            const fullUser = await getUser(userId, db);
             if (fullUser == null) {
                 return {
                     status: OperationResult.Error,
@@ -237,7 +240,7 @@ export const ResourceResolvers: Resolvers = {
                     ],
                     user: { role, _id: new ObjectId(id), username: userNameMap?.[id] },
                 })),
-                createdBy: { _id: new ObjectId(context?.user?._id ?? ""), username: fullUser.username },
+                createdBy: { _id: userId, username: fullUser.username },
                 activeUserCount: 0
             }
             const result = await db.collection<ResourceDbObject>(RESOURCES).insertOne(newResource);
@@ -255,13 +258,16 @@ export const ResourceResolvers: Resolvers = {
             return { status: OperationResult.Ok, newObjectId: result.insertedId.toHexString() };
         },
         updateResource: async (parent, args, context: GraphQLContext) => {
-            const { name, description, maxActiveTickets, userList: newUserList, id } = args.resource
             const timestamp = new Date();
+            const { name, description, maxActiveTickets, userList: newUserList, id } = args.resource
+            const { userId: targetUserId } = args;
+            const userId = getTargetUserId(context.user, targetUserId);
+
             const db = await (await context.mongoDBConnection).db;
 
             const client = await (await context.mongoDBConnection).connection;
 
-            const hasAdminAccess = await hasAdminAccessInResource(new ObjectId(context?.user?._id ?? "").toHexString() ?? "", id ?? "", db)
+            const hasAdminAccess = await hasAdminAccessInResource(userId.toHexString() ?? "", id ?? "", db)
             if (!hasAdminAccess) {
                 return { status: OperationResult.Error }
             }
@@ -413,12 +419,14 @@ export const ResourceResolvers: Resolvers = {
             return { status: OperationResult.Ok };
         },
         deleteResource: async (parent, args, context: GraphQLContext) => {
-            const { resourceId } = args
+            const { resourceId, userId: targetUserId } = args
+            const userId = getTargetUserId(context.user, targetUserId);
             const db = await (await context.mongoDBConnection).db;
+            
 
-            const hasAdminAccess = await hasAdminAccessInResource(new ObjectId(context?.user?._id ?? "").toHexString() ?? "", resourceId, db)
+            const hasAdminAccess = await hasAdminAccessInResource(userId.toHexString() ?? "", resourceId, db)
             if (!hasAdminAccess) {
-                // console.log("Does not have admin access", hasAdminAccess, new ObjectId(context?.user?._id ?? ""), resourceId);
+                // console.log("Does not have admin access", hasAdminAccess, userId, resourceId);
                 return { status: OperationResult.Error }
             }
 
@@ -444,8 +452,9 @@ export const ResourceResolvers: Resolvers = {
 
         // Resource management operations
         requestResource: async (parent, args, context: GraphQLContext) => {
-            const { requestFrom, resourceId } = args
-            let timestamp = new Date();
+            const { requestFrom, resourceId, userId: targetUserId } = args
+            const userId = getTargetUserId(context.user, targetUserId);
+            const timestamp = new Date();
 
             const client = await (await context.mongoDBConnection).connection;
             const db = await (await context.mongoDBConnection).db;
@@ -472,7 +481,7 @@ export const ResourceResolvers: Resolvers = {
                         maxActiveTickets = 0,
                         previousStatusCode,
                         lastQueuePosition
-                    } = await canRequestStatusChange(new ObjectId(context?.user?._id ?? ""), resourceId, TicketStatusCode.Requesting, timestamp, db, session);
+                    } = await canRequestStatusChange(userId, resourceId, TicketStatusCode.Requesting, timestamp, db, session);
 
                     if (!canRequest) {
                         result = { status: OperationResult.Error }
@@ -521,11 +530,12 @@ export const ResourceResolvers: Resolvers = {
 
 
             // Status changed, now let's return the new resource
-            return generateOutputByResource[requestFrom](resource, new ObjectId(context?.user?._id ?? ""), resourceId, db);
+            return generateOutputByResource[requestFrom](resource, userId, resourceId, db);
         },
         acquireResource: async (parent, args, context: GraphQLContext) => {
-            const { resourceId } = args
-            let timestamp = new Date();
+            const timestamp = new Date();
+            const { resourceId, userId: targetUserId } = args
+            const userId = getTargetUserId(context.user, targetUserId);
 
             const client = await (await context.mongoDBConnection).connection;
             const db = await (await context.mongoDBConnection).db;
@@ -545,7 +555,7 @@ export const ResourceResolvers: Resolvers = {
             try {
                 await session.withTransaction(async () => {
                     // Check if we can request the resource right now
-                    const { canRequest, ticketId, previousStatusCode, firstQueuePosition } = await canRequestStatusChange(new ObjectId(context?.user?._id ?? ""), resourceId, TicketStatusCode.Active, timestamp, db, session);
+                    const { canRequest, ticketId, previousStatusCode, firstQueuePosition } = await canRequestStatusChange(userId, resourceId, TicketStatusCode.Active, timestamp, db, session);
                     if (!canRequest) {
                         result = { status: OperationResult.Error }
                         throw result;
@@ -571,7 +581,7 @@ export const ResourceResolvers: Resolvers = {
             try {
                 await session2.withTransaction(async () => {
                     // Check if we can request the resource right now
-                    const { canRequest, ticketId, previousStatusCode, firstQueuePosition } = await canRequestStatusChange(new ObjectId(context?.user?._id ?? ""), resourceId, TicketStatusCode.Active, timestamp, db, session2);
+                    const { canRequest, ticketId, previousStatusCode, firstQueuePosition } = await canRequestStatusChange(userId, resourceId, TicketStatusCode.Active, timestamp, db, session2);
                     if (!canRequest) {
                         result = { status: OperationResult.Error }
                         throw result;
@@ -606,11 +616,12 @@ export const ResourceResolvers: Resolvers = {
             }
 
             // Status changed, now let's return the new resource
-            return generateOutputByResource["HOME"](resource, new ObjectId(context?.user?._id ?? ""), resourceId, db);
+            return generateOutputByResource["HOME"](resource, userId, resourceId, db);
         },
         cancelResourceAcquire: async (parent, args, context: GraphQLContext) => {
-            const { resourceId } = args
             let timestamp = new Date();
+            const { resourceId, userId: targetUserId } = args;
+            const userId = getTargetUserId(context.user, targetUserId);
 
             const client = await (await context.mongoDBConnection).connection;
             const db = await (await context.mongoDBConnection).db;
@@ -630,7 +641,7 @@ export const ResourceResolvers: Resolvers = {
             try {
                 await session.withTransaction(async () => {
                     // Check if we can request the resource right now
-                    const { canRequest, firstQueuePosition } = await canRequestStatusChange(new ObjectId(context?.user?._id ?? ""), resourceId, TicketStatusCode.Inactive, timestamp, db, session);
+                    const { canRequest, firstQueuePosition } = await canRequestStatusChange(userId, resourceId, TicketStatusCode.Inactive, timestamp, db, session);
                     if (!canRequest) {
                         result = { status: OperationResult.Error }
                         throw result;
@@ -656,7 +667,7 @@ export const ResourceResolvers: Resolvers = {
             try {
                 await session2.withTransaction(async () => {
                     // Check if we can request the resource right now
-                    const { canRequest, ticketId, previousStatusCode, firstQueuePosition } = await canRequestStatusChange(new ObjectId(context?.user?._id ?? ""), resourceId, TicketStatusCode.Queued, timestamp, db, session2);
+                    const { canRequest, ticketId, previousStatusCode, firstQueuePosition } = await canRequestStatusChange(userId, resourceId, TicketStatusCode.Queued, timestamp, db, session2);
                     if (!canRequest) {
                         result = { status: OperationResult.Error }
                         throw result;
@@ -701,11 +712,12 @@ export const ResourceResolvers: Resolvers = {
             ])
 
             // Status changed, now let's return the new resource
-            return generateOutputByResource["HOME"](resource, new ObjectId(context?.user?._id ?? ""), resourceId, db);
+            return generateOutputByResource["HOME"](resource, userId, resourceId, db);
         },
         releaseResource: async (parent, args, context: GraphQLContext) => {
-            const { requestFrom, resourceId } = args
-            let timestamp = new Date();
+            const timestamp = new Date();
+            const { requestFrom, resourceId, userId: targetUserId } = args
+            const userId = getTargetUserId(context.user, targetUserId);
 
             const client = await (await context.mongoDBConnection).connection;
             const db = await (await context.mongoDBConnection).db;
@@ -725,7 +737,7 @@ export const ResourceResolvers: Resolvers = {
             try {
                 await session.withTransaction(async () => {
                     // Check if we can request the resource right now
-                    const { canRequest, ticketId, previousStatusCode, firstQueuePosition } = await canRequestStatusChange(new ObjectId(context?.user?._id ?? ""), resourceId, TicketStatusCode.Inactive, timestamp, db, session);
+                    const { canRequest, ticketId, previousStatusCode, firstQueuePosition } = await canRequestStatusChange(userId, resourceId, TicketStatusCode.Inactive, timestamp, db, session);
                     if (!canRequest) {
                         result = { status: OperationResult.Error }
                         throw result;
@@ -768,7 +780,7 @@ export const ResourceResolvers: Resolvers = {
 
 
             // Status changed, now let's return the new resource
-            return generateOutputByResource[requestFrom](resource, new ObjectId(context?.user?._id ?? ""), resourceId, db);
+            return generateOutputByResource[requestFrom](resource, userId, resourceId, db);
         }
     }
 }

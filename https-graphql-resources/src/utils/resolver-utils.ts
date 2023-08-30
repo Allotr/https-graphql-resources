@@ -1,4 +1,4 @@
-import { OperationResult, ResourceDbObject, UserDbObject, LocalRole, TicketStatusCode, RequestSource, ResourceManagementResult, ResourceNotificationDbObject, ResourceUser } from "allotr-graphql-schema-types";
+import { OperationResult, ResourceDbObject, UserDbObject, LocalRole, TicketStatusCode, RequestSource, ResourceManagementResult, ResourceNotificationDbObject, ResourceUser, Maybe } from "allotr-graphql-schema-types";
 import { ObjectId, ClientSession, Db, ReadPreference, WriteConcern, ReadConcern, TransactionOptions } from "mongodb"
 import { generateChannelId, getFirstQueuePosition, getLastQueuePosition, getLastStatus } from "./data-util";
 import { NOTIFICATIONS, RESOURCES, USERS } from "../consts/collections";
@@ -7,7 +7,7 @@ import { RESOURCE_READY_TO_PICK } from "../consts/connection-tokens";
 import { getRedisConnection } from "./redis-connector";
 
 import { GraphQLContext } from "../types/yoga-context";
-import { canRequestStatusChange } from "../guards/guards";
+import { canRequestStatusChange, getTargetUserId } from "../guards/guards";
 async function getUserTicket(userId: string | ObjectId, resourceId: string, db: Db, session?: ClientSession): Promise<ResourceDbObject | null> {
     const [parsedUserId, parsedResourceId] = [new ObjectId(userId), new ObjectId(resourceId)];
 
@@ -204,9 +204,11 @@ async function clearOutQueueDependantTickets(
 ) {
 
     const functionMap: Record<typeof status, Function> = {
+        // releaseResource
         ACTIVE: async (parent, args, context: GraphQLContext) => {
-            const { requestFrom, resourceId } = args
-            let timestamp = new Date();
+            const timestamp = new Date();
+            const { requestFrom, resourceId, userId: targetUserId } = args
+            const userId = getTargetUserId(context.user, targetUserId);
 
             const client = await (await context.mongoDBConnection).connection;
             const db = await (await context.mongoDBConnection).db;
@@ -226,7 +228,7 @@ async function clearOutQueueDependantTickets(
             try {
                 await session.withTransaction(async () => {
                     // Check if we can request the resource right now
-                    const { canRequest, ticketId, previousStatusCode, firstQueuePosition } = await canRequestStatusChange(new ObjectId(context?.user?._id ?? ""), resourceId, TicketStatusCode.Inactive, timestamp, db, session);
+                    const { canRequest, ticketId, previousStatusCode, firstQueuePosition } = await canRequestStatusChange(userId, resourceId, TicketStatusCode.Inactive, timestamp, db, session);
                     if (!canRequest) {
                         result = { status: OperationResult.Error }
                         throw result;
@@ -238,7 +240,11 @@ async function clearOutQueueDependantTickets(
                     // Notify our next in queue user
                     await notifyFirstInQueue(resourceId, timestamp, firstQueuePosition, db, session);
                 }, transactionOptions);
-            } finally {
+            }
+            catch (error) {
+                // Implement if needed
+            }
+            finally {
                 await context?.cache?.invalidate([
                     { typename: 'ResourceView' },
                     { typename: 'ResourceCard' }
@@ -263,18 +269,15 @@ async function clearOutQueueDependantTickets(
             await pushNotification(resource?.name, resource?._id, resource?.createdBy?._id, resource?.createdBy?.username, timestamp, db);
 
 
-            await context?.cache?.invalidate([
-                { typename: 'ResourceView' },
-                { typename: 'ResourceCard' }
-            ])
-
 
             // Status changed, now let's return the new resource
-            return generateOutputByResource[requestFrom](resource, new ObjectId(context?.user?._id ?? ""), resourceId, db);
+            return generateOutputByResource[requestFrom](resource, userId, resourceId, db);
         },
+        // cancelResourceAcquire
         AWAITING_CONFIRMATION: async (parent, args, context: GraphQLContext) => {
-            const { resourceId } = args
             let timestamp = new Date();
+            const { resourceId, userId: targetUserId } = args;
+            const userId = getTargetUserId(context.user, targetUserId);
 
             const client = await (await context.mongoDBConnection).connection;
             const db = await (await context.mongoDBConnection).db;
@@ -294,7 +297,7 @@ async function clearOutQueueDependantTickets(
             try {
                 await session.withTransaction(async () => {
                     // Check if we can request the resource right now
-                    const { canRequest, firstQueuePosition } = await canRequestStatusChange(new ObjectId(context?.user?._id ?? ""), resourceId, TicketStatusCode.Inactive, timestamp, db, session);
+                    const { canRequest, firstQueuePosition } = await canRequestStatusChange(userId, resourceId, TicketStatusCode.Inactive, timestamp, db, session);
                     if (!canRequest) {
                         result = { status: OperationResult.Error }
                         throw result;
@@ -302,7 +305,11 @@ async function clearOutQueueDependantTickets(
                     // Remove our awaiting confirmation
                     await removeAwaitingConfirmation(resourceId, firstQueuePosition, session, db)
                 }, transactionOptions);
-            } finally {
+            }
+            catch (error) {
+                // Implement if needed
+            }
+            finally {
                 await context?.cache?.invalidate([
                     { typename: 'ResourceView' },
                     { typename: 'ResourceCard' }
@@ -316,7 +323,7 @@ async function clearOutQueueDependantTickets(
             try {
                 await session2.withTransaction(async () => {
                     // Check if we can request the resource right now
-                    const { canRequest, ticketId, previousStatusCode, firstQueuePosition } = await canRequestStatusChange(new ObjectId(context?.user?._id ?? ""), resourceId, TicketStatusCode.Queued, timestamp, db, session2);
+                    const { canRequest, ticketId, previousStatusCode, firstQueuePosition } = await canRequestStatusChange(userId, resourceId, TicketStatusCode.Queued, timestamp, db, session2);
                     if (!canRequest) {
                         result = { status: OperationResult.Error }
                         throw result;
@@ -328,7 +335,11 @@ async function clearOutQueueDependantTickets(
 
 
                 }, transactionOptions);
-            } finally {
+            }
+            catch (error) {
+                // Implement if needed
+            }
+            finally {
                 await context?.cache?.invalidate([
                     { typename: 'ResourceView' },
                     { typename: 'ResourceCard' }
@@ -357,13 +368,13 @@ async function clearOutQueueDependantTickets(
             ])
 
             // Status changed, now let's return the new resource
-            return generateOutputByResource["HOME"](resource, new ObjectId(context?.user?._id ?? ""), resourceId, db);
+            return generateOutputByResource["HOME"](resource, userId, resourceId, db);
         }
     }
 
     const argMap: Record<typeof status, Function> = {
-        ACTIVE: (resourceId: ObjectId, requestFrom: RequestSource) => ({ resourceId, requestFrom }),
-        AWAITING_CONFIRMATION: (resourceId: ObjectId) => ({ resourceId })
+        ACTIVE: (resourceId: ObjectId,  userId: Maybe<string> | undefined, requestFrom: RequestSource) => ({ resourceId, requestFrom, userId }),
+        AWAITING_CONFIRMATION: (resourceId: ObjectId, userId: Maybe<string> | undefined) => ({ resourceId, userId })
     }
 
     const filteredUserList = userList.filter(({ id }) => {
@@ -375,7 +386,7 @@ async function clearOutQueueDependantTickets(
     });
     for (const user of filteredUserList) {
         try {
-            const args = argMap[status](new ObjectId(resource?._id ?? "").toHexString() ?? "", RequestSource.Resource)
+            const args = argMap[status](new ObjectId(resource?._id ?? "").toHexString() ?? "", new ObjectId(user.id), RequestSource.Resource)
             const functionContext = {
                 ...context,
                 user: await getUser(new ObjectId(user.id), db, session)

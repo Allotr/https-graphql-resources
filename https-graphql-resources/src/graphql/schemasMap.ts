@@ -5,7 +5,7 @@ import { GraphQLSchema } from "graphql";
 import { makeExecutableSchema } from '@graphql-tools/schema'
 import { stitchingDirectives } from '@graphql-tools/stitching-directives'
 import { mergeResolvers } from "@graphql-tools/merge";
-import { ResourceResolvers } from './resolvers/ResourceResolvers';
+import { ResourceResolvers } from './resolvers';
 
 const { allStitchingDirectivesTypeDefs, stitchingDirectivesValidator } = stitchingDirectives()
 
