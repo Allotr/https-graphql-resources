@@ -57,14 +57,16 @@ function onServerCreated(app: TemplatedApp) {
           ]
 
           const data = result?.data as any;
+          // Check that result is not an error
+          const hasOkValue = !_.isEmpty(result?.data) && _.isEmpty(result?.errors);
           // Check only fields in data
-          const fieldsAvailable = queryNames.filter(field=>field in (data ?? {}));
+          const fieldsAvailable = queryNames.filter(field => field in (data ?? {}));
           // Check value is not empty
-          const isValidValue = fieldsAvailable.every(query => !_.isEmpty(data?.[query]) && _.isEmpty(result?.errors));
+          const isValidValue = fieldsAvailable.every(query => !_.isEmpty(data?.[query]));
           // Check function is valid
           const isValidFunction = functionBlacklist.every(key => data?.[key] == null);
 
-          return isValidValue && isValidFunction
+          return hasOkValue && isValidValue && isValidFunction
         },
         cache
       })
