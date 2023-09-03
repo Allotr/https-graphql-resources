@@ -326,8 +326,8 @@ export const ResourceResolvers: Resolvers = {
                     { typename: 'ResourceView' },
                     { typename: 'ResourceCard' }
                 ])
-                await unlockCacheWrite();
                 await sessionInit.endSession();
+                await unlockCacheWrite();
             }
 
 
@@ -412,8 +412,8 @@ export const ResourceResolvers: Resolvers = {
                     { typename: 'ResourceView' },
                     { typename: 'ResourceCard' }
                 ])
-                await unlockCacheWrite();
                 await session.endSession();
+                await unlockCacheWrite();
             }
 
             if (result.status === OperationResult.Error) {
@@ -521,8 +521,8 @@ export const ResourceResolvers: Resolvers = {
                     { typename: 'ResourceView' },
                     { typename: 'ResourceCard' }
                 ])
-                await unlockCacheWrite();
                 await session.endSession();
+                await unlockCacheWrite();
             }
             if (result.status === OperationResult.Error) {
                 return result;
@@ -563,45 +563,18 @@ export const ResourceResolvers: Resolvers = {
             try {
                 await session.withTransaction(async () => {
                     // Check if we can request the resource right now
-                    const { canRequest, ticketId, previousStatusCode, firstQueuePosition } = await canRequestStatusChange(userId, resourceId, TicketStatusCode.Active, timestamp, db, session);
+                    const { canRequest, ticketId, firstQueuePosition } = await canRequestStatusChange(userId, resourceId, TicketStatusCode.Active, timestamp, db, session);
                     if (!canRequest) {
                         result = { status: OperationResult.Error }
                         throw result;
                     }
-                    // Change status to active
+                    // Remove AWAITING_CONFIRMATION status
                     await removeAwaitingConfirmation(resourceId, firstQueuePosition, session, db)
-                }, transactionOptions);
-            }
-            catch (error) {
-                // Implement if needed
-            }
-            finally {
-                await lockCacheWrite();
-                await context?.cache?.invalidate([
-                    { typename: 'ResourceView' },
-                    { typename: 'ResourceCard' }
-                ])
-                await unlockCacheWrite();
-                await session.endSession();
-            }
-
-            // // Step 1: Start a Client Session
-            const session2 = client.startSession();
-
-            try {
-                await session2.withTransaction(async () => {
-                    // Check if we can request the resource right now
-                    const { canRequest, ticketId, previousStatusCode, firstQueuePosition } = await canRequestStatusChange(userId, resourceId, TicketStatusCode.Active, timestamp, db, session2);
-                    if (!canRequest) {
-                        result = { status: OperationResult.Error }
-                        throw result;
-                    }
-                    // Change status to active
+                    // Now the latest status for this ticket is QUEUED
                     // Move people forward in the queue
-                    await forwardQueue(resourceId, timestamp, session2, db);
-                    await pushNewStatus(resourceId, ticketId, { statusCode: TicketStatusCode.Active, timestamp }, session2, db, previousStatusCode);
-
-
+                    await forwardQueue(resourceId, timestamp, session, db);
+                    // And we are ready to activate!
+                    await pushNewStatus(resourceId, ticketId, { statusCode: TicketStatusCode.Active, timestamp }, session, db, TicketStatusCode.Queued);
                 }, transactionOptions);
             }
             catch (error) {
@@ -613,9 +586,10 @@ export const ResourceResolvers: Resolvers = {
                     { typename: 'ResourceView' },
                     { typename: 'ResourceCard' }
                 ])
+                await session.endSession();
                 await unlockCacheWrite();
-                await session2.endSession();
             }
+
             if (result.status === OperationResult.Error) {
                 return result;
             }
@@ -660,45 +634,22 @@ export const ResourceResolvers: Resolvers = {
             try {
                 await session.withTransaction(async () => {
                     // Check if we can request the resource right now
-                    const { canRequest, firstQueuePosition } = await canRequestStatusChange(userId, resourceId, TicketStatusCode.Inactive, timestamp, db, session);
+                    const { canRequest, ticketId, firstQueuePosition } = await canRequestStatusChange(userId, resourceId, TicketStatusCode.Inactive, timestamp, db, session);
                     if (!canRequest) {
                         result = { status: OperationResult.Error }
                         throw result;
                     }
-                    // Remove our awaiting confirmation
+                    // Remove AWAITING_CONFIRMATION status
                     await removeAwaitingConfirmation(resourceId, firstQueuePosition, session, db)
-                }, transactionOptions);
-            }
-            catch (error) {
-                // Implement if needed
-            }
-            finally {
-                await lockCacheWrite();
-                await context?.cache?.invalidate([
-                    { typename: 'ResourceView' },
-                    { typename: 'ResourceCard' }
-                ])
-                await unlockCacheWrite();
-                await session.endSession();
-            }
+                    // Now the latest status for this ticket is QUEUED
 
-            // // Step 1: Start a Client Session
-            const session2 = client.startSession();
-
-            try {
-                await session2.withTransaction(async () => {
-                    // Check if we can request the resource right now
-                    const { canRequest, ticketId, previousStatusCode, firstQueuePosition } = await canRequestStatusChange(userId, resourceId, TicketStatusCode.Queued, timestamp, db, session2);
-                    if (!canRequest) {
-                        result = { status: OperationResult.Error }
-                        throw result;
-                    }
-                    // Change status to active
+                    // Change status to inactive
                     // Move people forward in the queue
-                    await forwardQueue(resourceId, timestamp, session2, db);
-                    await pushNewStatus(resourceId, ticketId, { statusCode: TicketStatusCode.Inactive, timestamp }, session2, db, previousStatusCode);
-
-
+                    await forwardQueue(resourceId, timestamp, session, db);
+                    // And we are ready to deactivate!
+                    await pushNewStatus(resourceId, ticketId, { statusCode: TicketStatusCode.Inactive, timestamp }, session, db, TicketStatusCode.Queued);
+                    // Now we notify the first user in the queue
+                    await notifyFirstInQueue(resourceId, timestamp, firstQueuePosition, db, session);
                 }, transactionOptions);
             }
             catch (error) {
@@ -710,9 +661,11 @@ export const ResourceResolvers: Resolvers = {
                     { typename: 'ResourceView' },
                     { typename: 'ResourceCard' }
                 ])
+                await session.endSession();
                 await unlockCacheWrite();
-                await session2.endSession();
             }
+
+
             if (result.status === OperationResult.Error) {
                 return result;
             }
@@ -723,18 +676,7 @@ export const ResourceResolvers: Resolvers = {
             if (resource == null) {
                 return { status: OperationResult.Error }
             }
-
-            const firstQueuePosition = getFirstQueuePosition(resource?.tickets ?? []);
-            await notifyFirstInQueue(resourceId, timestamp, firstQueuePosition, db);
-
             await pushNotification(resource?.name, resource?._id, resource?.createdBy?._id, resource?.createdBy?.username, timestamp, db);
-
-            await lockCacheWrite();
-            await context?.cache?.invalidate([
-                { typename: 'ResourceView' },
-                { typename: 'ResourceCard' }
-            ])
-            await unlockCacheWrite();
 
             // Status changed, now let's return the new resource
             return generateOutputByResource["HOME"](resource, userId, resourceId, db);
