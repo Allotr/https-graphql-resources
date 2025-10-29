@@ -19,8 +19,8 @@ function getLoadedEnvVariables(): EnvObject {
 
 function areVariablesValid(loadedVariables: Record<string, string | undefined>): loadedVariables is EnvObject {
     const invalidVariables = Object.entries(loadedVariables).filter(([, value]) => value == null);
-    for (const [key] of invalidVariables) {
-        throw new Error(`This app cannot be executed, make sure you set a valid value for ${key} inside the .env file`);
+    if (invalidVariables.length > 0) {
+        throw new Error(`This app cannot be executed, make sure you set a valid value for ${invalidVariables.map(([key])=> key).join(", ")} inside the .env file`);
     }
     return invalidVariables.length === 0;
 }
